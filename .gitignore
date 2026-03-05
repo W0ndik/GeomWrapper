@@ -1,0 +1,41 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyd
+*.pyo
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# Packaging / build
+build/
+dist/
+*.egg-info/
+
+# IDE
+.vscode/
+.idea/
+*.user
+*.suo
+*.njsproj
+*.sln
+
+# OS junk
+.DS_Store
+Thumbs.db
+
+# PyVista / VTK artifacts
+*.log
+*.vtk
+*.vtp
+*.vtu
+wrap_view.png
+cubes_view.png
+cubes_shrink_view.png
+
+# Outputs
+*.stl
+*.obj
+*.ply
