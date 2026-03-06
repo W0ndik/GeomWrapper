@@ -10,6 +10,13 @@ class GridParams:
 
 
 @dataclass
+class OctreeParams:
+    enabled: bool = False
+    max_level: int = 6
+    balance_max_iters: int = 20
+
+
+@dataclass
 class ShrinkParams:
     iters: int = 25
     step: float = 0.35
@@ -21,4 +28,5 @@ class ShrinkParams:
 @dataclass
 class AppParams:
     grid: GridParams = field(default_factory=GridParams)
+    octree: OctreeParams = field(default_factory=OctreeParams)
     shrink: ShrinkParams = field(default_factory=ShrinkParams)

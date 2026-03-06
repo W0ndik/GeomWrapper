@@ -80,6 +80,27 @@ class MainWindow(QtWidgets.QMainWindow):
 
         lay.addWidget(file_box)
 
+        mode_box = QtWidgets.QGroupBox("Mode")
+        ml = QtWidgets.QFormLayout(mode_box)
+
+        self.cb_mode = QtWidgets.QComboBox()
+        self.cb_mode.addItem("Uniform grid", userData="uniform")
+        self.cb_mode.addItem("Octree 2to1", userData="octree")
+
+        self.sp_oct_level = QtWidgets.QSpinBox()
+        self.sp_oct_level.setRange(1, 12)
+        self.sp_oct_level.setValue(6)
+
+        self.sp_oct_bal_iters = QtWidgets.QSpinBox()
+        self.sp_oct_bal_iters.setRange(0, 200)
+        self.sp_oct_bal_iters.setValue(20)
+
+        ml.addRow("grid mode", self.cb_mode)
+        ml.addRow("octree max level", self.sp_oct_level)
+        ml.addRow("balance iters", self.sp_oct_bal_iters)
+
+        lay.addWidget(mode_box)
+
         grid_box = QtWidgets.QGroupBox("Grid")
         gl = QtWidgets.QFormLayout(grid_box)
 
@@ -189,6 +210,11 @@ class MainWindow(QtWidgets.QMainWindow):
         p.grid.padding_mul = float(self.sp_padding_mul.value())
         p.grid.band_mul = float(self.sp_band_mul.value())
         p.grid.max_dim = int(self.sp_max_dim.value())
+
+        mode = self.cb_mode.currentData()
+        p.octree.enabled = (mode == "octree")
+        p.octree.max_level = int(self.sp_oct_level.value())
+        p.octree.balance_max_iters = int(self.sp_oct_bal_iters.value())
 
         p.shrink.iters = int(self.sp_iters.value())
         p.shrink.step = float(self.sp_step.value())
