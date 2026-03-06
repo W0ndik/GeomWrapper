@@ -26,7 +26,7 @@ def build_masks_from_sdf(sdf_cell: np.ndarray, band: float):
 
 def extract_front_cubes(img: pv.ImageData, front: np.ndarray) -> pv.DataSet:
     front_flat = front.astype(np.uint8).reshape(-1, order="F")
-    img = img.copy(deep=True)
-    img.cell_data["front"] = front_flat
-    vox_front = img.threshold([0.5, 1.5], scalars="front", preference="cell")
+    img2 = img.copy(deep=True)
+    img2.cell_data["front"] = front_flat
+    vox_front = img2.threshold([0.5, 1.5], scalars="front", preference="cell")
     return vox_front

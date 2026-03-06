@@ -86,7 +86,7 @@ def shrink_shell_to_mesh(
 
     pts = np.asarray(out.points, dtype=np.float64)
 
-    for _ in range(iters):
+    for _ in range(int(iters)):
         min_edge = compute_min_edge_lengths(pts, adj)
         constraints = min_edge * float(constraint_mul)
 

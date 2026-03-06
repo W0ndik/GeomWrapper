@@ -69,7 +69,7 @@ def point_to_cell_average(img: pv.ImageData, point_scalar_name: str) -> np.ndarr
         + s[:-1, 1:, 1:]
         + s[1:, 1:, 1:]
     ) * 0.125
-    return c  # (nx, ny, nz)
+    return c
 
 
 def build_grid_and_sdf(mesh: pv.PolyData, pitch: float, padding_mul: float, max_dim: int):
