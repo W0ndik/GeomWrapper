@@ -7,21 +7,26 @@ from app.sdf_grid import build_grid_and_sdf
 from app.front import build_masks_from_sdf, extract_front_cubes
 from app.shell import build_shell_from_front
 from app.shrink import shrink_shell_to_mesh
-
+from app.metrics import MeshMetrics, compute_mesh_metrics
 from app.octree import build_octree_leaves, balance_2to1, compute_front_leaves_and_outside_grid, front_cubes_polydata
 from app.shell_octree import build_shell_from_front_leaves
 
 
+from dataclasses import dataclass
+from app.metrics import MeshMetrics
+
 @dataclass
 class PipelineResult:
     mesh: pv.PolyData
-    vox_front: pv.DataSet | pv.PolyData
+    vox_front: pv.PolyData
     shell0: pv.PolyData
     shell1: pv.PolyData
     pitch_used: float
     clamped: bool
     band: float
     mode: str
+    shell0_metrics: MeshMetrics | None = None
+    shell1_metrics: MeshMetrics | None = None
 
 
 def run_pipeline(stl_path: str, params: AppParams) -> PipelineResult:
@@ -86,4 +91,18 @@ def run_pipeline(stl_path: str, params: AppParams) -> PipelineResult:
         lap_relax=params.shrink.lap_relax,
     )
 
-    return PipelineResult(mesh, vox_front, shell0, shell1, pitch_used, clamped, band, "octree")
+    shell0_metrics = compute_mesh_metrics(shell0, mesh)
+    shell1_metrics = compute_mesh_metrics(shell1, mesh)
+
+    return PipelineResult(
+        mesh=mesh,
+        vox_front=vox_front,
+        shell0=shell0,
+        shell1=shell1,
+        pitch_used=pitch_used,
+        clamped=clamped,
+        band=band,
+        mode=mode,
+        shell0_metrics=shell0_metrics,
+        shell1_metrics=shell1_metrics,
+    )
