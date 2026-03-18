@@ -1,4 +1,5 @@
 import os
+
 from PySide6 import QtCore, QtWidgets
 from pyvistaqt import QtInteractor
 import pyvista as pv
@@ -50,7 +51,7 @@ class MainWindow(QtWidgets.QMainWindow):
         self._actors = {}
         self._build_default_scene()
 
-        self.resize(1300, 800)
+        self.resize(1450, 850)
 
     def _build_default_scene(self):
         self.plotter.add_text("Open STL and run pipeline", font_size=12)
@@ -187,6 +188,17 @@ class MainWindow(QtWidgets.QMainWindow):
 
         lay.addWidget(view_box)
 
+        metrics_box = QtWidgets.QGroupBox("Metrics")
+        metrics_layout = QtWidgets.QVBoxLayout(metrics_box)
+
+        self.metrics_text = QtWidgets.QPlainTextEdit()
+        self.metrics_text.setReadOnly(True)
+        self.metrics_text.setMinimumHeight(220)
+        self.metrics_text.setPlainText("No metrics yet")
+
+        metrics_layout.addWidget(self.metrics_text)
+        lay.addWidget(metrics_box)
+
         self.status = QtWidgets.QLabel("Ready")
         lay.addWidget(self.status)
 
@@ -206,6 +218,7 @@ class MainWindow(QtWidgets.QMainWindow):
 
     def _collect_params(self) -> AppParams:
         p = AppParams()
+
         p.grid.pitch = float(self.sp_pitch.value())
         p.grid.padding_mul = float(self.sp_padding_mul.value())
         p.grid.band_mul = float(self.sp_band_mul.value())
@@ -221,18 +234,25 @@ class MainWindow(QtWidgets.QMainWindow):
         p.shrink.constraint_mul = float(self.sp_constraint.value())
         p.shrink.lap_iters_per_step = int(self.sp_lap_iters.value())
         p.shrink.lap_relax = float(self.sp_lap_relax.value())
+
         return p
 
     def _set_busy(self, busy: bool, text: str = ""):
         self.btn_open.setEnabled(not busy)
-        self.btn_run.setEnabled(not busy and bool(self._stl_path))
+        self.btn_run.setEnabled((not busy) and bool(self._stl_path))
         self.btn_save.setEnabled((not busy) and (self._res is not None))
         self.status.setText(text if text else ("Busy" if busy else "Ready"))
 
     def _on_open(self):
-        path, _ = QtWidgets.QFileDialog.getOpenFileName(self, "Select STL", "", "STL files (*.stl);;All files (*.*)")
+        path, _ = QtWidgets.QFileDialog.getOpenFileName(
+            self,
+            "Select STL",
+            "",
+            "STL files (*.stl);;All files (*.*)",
+        )
         if not path:
             return
+
         self._stl_path = path
         self.path_edit.setText(path)
         self.btn_run.setEnabled(True)
@@ -244,8 +264,9 @@ class MainWindow(QtWidgets.QMainWindow):
             return
 
         params = self._collect_params()
-
         self._set_busy(True, "Running pipeline")
+        self.metrics_text.setPlainText("Running...")
+
         self._worker = PipelineWorker(self._stl_path, params)
         self._worker.finished_ok.connect(self._on_pipeline_ok)
         self._worker.finished_err.connect(self._on_pipeline_err)
@@ -254,11 +275,18 @@ class MainWindow(QtWidgets.QMainWindow):
     def _on_pipeline_ok(self, res_obj):
         self._res = res_obj
         self._worker = None
+
         self._render_result(res_obj)
-        self._set_busy(False, f"Done. pitch_used={res_obj.pitch_used:.4g} band={res_obj.band:.4g}")
+        self._update_metrics_panel(res_obj)
+
+        self._set_busy(
+            False,
+            f"Done. mode={res_obj.mode} pitch_used={res_obj.pitch_used:.4g} band={res_obj.band:.4g}",
+        )
 
     def _on_pipeline_err(self, msg: str):
         self._worker = None
+        self.metrics_text.setPlainText("Pipeline failed")
         self._set_busy(False, "Error")
         QtWidgets.QMessageBox.critical(self, "Pipeline error", msg)
 
@@ -297,12 +325,52 @@ class MainWindow(QtWidgets.QMainWindow):
 
         self.plotter.render()
 
+    def _fmt_metrics_block(self, title: str, m) -> str:
+        if m is None:
+            return f"{title}\n  no data"
+
+        lines = [
+            title,
+            f"  points: {m.n_points}",
+            f"  triangles: {m.n_triangles}",
+            f"  edge min/mean/max: {m.min_edge:.6g} / {m.mean_edge:.6g} / {m.max_edge:.6g}",
+            f"  area min/mean/max: {m.min_area:.6g} / {m.mean_area:.6g} / {m.max_area:.6g}",
+            f"  angle min/mean/max: {m.min_angle_deg:.6g} / {m.mean_angle_deg:.6g} / {m.max_angle_deg:.6g}",
+        ]
+
+        if m.mean_distance_to_target is not None:
+            lines.append(
+                f"  dist to target mean/max: {m.mean_distance_to_target:.6g} / {m.max_distance_to_target:.6g}"
+            )
+
+        return "\n".join(lines)
+
+    def _update_metrics_panel(self, res: PipelineResult):
+        parts = [
+            f"mode: {res.mode}",
+            f"pitch used: {res.pitch_used:.6g}",
+            f"band: {res.band:.6g}",
+            f"clamped: {res.clamped}",
+            "",
+            self._fmt_metrics_block("Shell0", res.shell0_metrics),
+            "",
+            self._fmt_metrics_block("Shell1", res.shell1_metrics),
+        ]
+        self.metrics_text.setPlainText("\n".join(parts))
+
     def _on_save(self):
         if self._res is None:
             return
-        path, _ = QtWidgets.QFileDialog.getSaveFileName(self, "Save STL", "shell_shrink.stl", "STL files (*.stl)")
+
+        path, _ = QtWidgets.QFileDialog.getSaveFileName(
+            self,
+            "Save STL",
+            "shell_shrink.stl",
+            "STL files (*.stl)",
+        )
         if not path:
             return
+
         try:
             self._res.shell1.save(path)
             self.status.setText(f"Saved: {path}")
