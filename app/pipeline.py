@@ -7,13 +7,17 @@ from app.sdf_grid import build_grid_and_sdf
 from app.front import build_masks_from_sdf, extract_front_cubes
 from app.shell import build_shell_from_front
 from app.shrink import shrink_shell_to_mesh
-from app.metrics import MeshMetrics, compute_mesh_metrics
-from app.octree import build_octree_leaves, balance_2to1, compute_front_leaves_and_outside_grid, front_cubes_polydata
+
+from app.octree import (
+    build_octree_leaves,
+    balance_2to1,
+    compute_front_leaves_and_outside_grid,
+    front_cubes_polydata,
+)
 from app.shell_octree import build_shell_from_front_leaves
 
+from app.metrics import MeshMetrics, compute_mesh_metrics
 
-from dataclasses import dataclass
-from app.metrics import MeshMetrics
 
 @dataclass
 class PipelineResult:
@@ -45,8 +49,10 @@ def run_pipeline(stl_path: str, params: AppParams) -> PipelineResult:
         _geom, outside, front = build_masks_from_sdf(sdf_cell, band)
         vox_front = extract_front_cubes(img, front)
         shell0 = build_shell_from_front(front, outside, origin=img.origin, pitch=img.spacing[0])
+
         if shell0.n_points == 0 or shell0.n_cells == 0:
             raise RuntimeError("Shell is empty. Increase pitch or band")
+
         shell1 = shrink_shell_to_mesh(
             shell=shell0,
             target_mesh=mesh,
@@ -56,7 +62,22 @@ def run_pipeline(stl_path: str, params: AppParams) -> PipelineResult:
             lap_iters_per_step=params.shrink.lap_iters_per_step,
             lap_relax=params.shrink.lap_relax,
         )
-        return PipelineResult(mesh, vox_front, shell0, shell1, pitch_used, clamped, band, "uniform")
+
+        shell0_metrics = compute_mesh_metrics(shell0, mesh)
+        shell1_metrics = compute_mesh_metrics(shell1, mesh)
+
+        return PipelineResult(
+            mesh=mesh,
+            vox_front=vox_front,
+            shell0=shell0,
+            shell1=shell1,
+            pitch_used=pitch_used,
+            clamped=clamped,
+            band=band,
+            mode="uniform",
+            shell0_metrics=shell0_metrics,
+            shell1_metrics=shell1_metrics,
+        )
 
     leaves, dims_pad, max_level = build_octree_leaves(
         sdf_cell=sdf_cell,
@@ -102,7 +123,7 @@ def run_pipeline(stl_path: str, params: AppParams) -> PipelineResult:
         pitch_used=pitch_used,
         clamped=clamped,
         band=band,
-        mode=mode,
+        mode="octree",
         shell0_metrics=shell0_metrics,
         shell1_metrics=shell1_metrics,
     )
