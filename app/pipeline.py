@@ -15,22 +15,19 @@ from app.octree import (
     front_cubes_polydata,
 )
 from app.shell_octree import build_shell_from_front_leaves
-
-from app.metrics import MeshMetrics, compute_mesh_metrics
+from app.front_repair import repair_front_defects
 
 
 @dataclass
 class PipelineResult:
     mesh: pv.PolyData
-    vox_front: pv.PolyData
+    vox_front: pv.DataSet | pv.PolyData
     shell0: pv.PolyData
     shell1: pv.PolyData
     pitch_used: float
     clamped: bool
     band: float
     mode: str
-    shell0_metrics: MeshMetrics | None = None
-    shell1_metrics: MeshMetrics | None = None
 
 
 def run_pipeline(stl_path: str, params: AppParams) -> PipelineResult:
@@ -48,7 +45,13 @@ def run_pipeline(stl_path: str, params: AppParams) -> PipelineResult:
     if not params.octree.enabled:
         _geom, outside, front = build_masks_from_sdf(sdf_cell, band)
         vox_front = extract_front_cubes(img, front)
-        shell0 = build_shell_from_front(front, outside, origin=img.origin, pitch=img.spacing[0])
+
+        shell0 = build_shell_from_front(
+            front,
+            outside,
+            origin=img.origin,
+            pitch=img.spacing[0],
+        )
 
         if shell0.n_points == 0 or shell0.n_cells == 0:
             raise RuntimeError("Shell is empty. Increase pitch or band")
@@ -63,9 +66,6 @@ def run_pipeline(stl_path: str, params: AppParams) -> PipelineResult:
             lap_relax=params.shrink.lap_relax,
         )
 
-        shell0_metrics = compute_mesh_metrics(shell0, mesh)
-        shell1_metrics = compute_mesh_metrics(shell1, mesh)
-
         return PipelineResult(
             mesh=mesh,
             vox_front=vox_front,
@@ -75,8 +75,6 @@ def run_pipeline(stl_path: str, params: AppParams) -> PipelineResult:
             clamped=clamped,
             band=band,
             mode="uniform",
-            shell0_metrics=shell0_metrics,
-            shell1_metrics=shell1_metrics,
         )
 
     leaves, dims_pad, max_level = build_octree_leaves(
@@ -94,10 +92,31 @@ def run_pipeline(stl_path: str, params: AppParams) -> PipelineResult:
         max_iters=int(params.octree.balance_max_iters),
     )
 
+    leaves, front_leaves, outside_grid = repair_front_defects(
+        leaves=leaves,
+        sdf_cell=sdf_cell,
+        band=band,
+        dims=dims_pad,
+        max_level=max_level,
+        balance_max_iters=int(params.octree.balance_max_iters),
+        repair_max_iters=max(1, int(params.octree.balance_max_iters)),
+    )
+
+    # Пересчёт на случай, если repair_max_iters == 0 или нужен финальный консистентный снимок
     front_leaves, outside_grid = compute_front_leaves_and_outside_grid(leaves, dims_pad)
 
-    vox_front = front_cubes_polydata(front_leaves, origin=img.origin, pitch=img.spacing[0])
-    shell0 = build_shell_from_front_leaves(front_leaves, outside_grid, origin=img.origin, pitch=img.spacing[0])
+    vox_front = front_cubes_polydata(
+        front_leaves,
+        origin=img.origin,
+        pitch=img.spacing[0],
+    )
+
+    shell0 = build_shell_from_front_leaves(
+        front_leaves,
+        outside_grid,
+        origin=img.origin,
+        pitch=img.spacing[0],
+    )
 
     if shell0.n_points == 0 or shell0.n_cells == 0:
         raise RuntimeError("Octree shell is empty. Increase pitch or band or decrease octree max_level")
@@ -112,9 +131,6 @@ def run_pipeline(stl_path: str, params: AppParams) -> PipelineResult:
         lap_relax=params.shrink.lap_relax,
     )
 
-    shell0_metrics = compute_mesh_metrics(shell0, mesh)
-    shell1_metrics = compute_mesh_metrics(shell1, mesh)
-
     return PipelineResult(
         mesh=mesh,
         vox_front=vox_front,
@@ -124,6 +140,4 @@ def run_pipeline(stl_path: str, params: AppParams) -> PipelineResult:
         clamped=clamped,
         band=band,
         mode="octree",
-        shell0_metrics=shell0_metrics,
-        shell1_metrics=shell1_metrics,
     )
