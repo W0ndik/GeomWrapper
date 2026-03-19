@@ -9,8 +9,9 @@ from app.pipeline import run_pipeline, PipelineResult
 
 
 class PipelineWorker(QtCore.QThread):
-    finished_ok = QtCore.Signal(object)   # PipelineResult
+    finished_ok = QtCore.Signal(object)
     finished_err = QtCore.Signal(str)
+    progress = QtCore.Signal(str)
 
     def __init__(self, stl_path: str, params: AppParams):
         super().__init__()
@@ -19,7 +20,11 @@ class PipelineWorker(QtCore.QThread):
 
     def run(self):
         try:
-            res = run_pipeline(self._path, self._params)
+            res = run_pipeline(
+                self._path,
+                self._params,
+                progress_cb=self.progress.emit,
+            )
             self.finished_ok.emit(res)
         except Exception as e:
             self.finished_err.emit(str(e))
@@ -39,8 +44,17 @@ class MainWindow(QtWidgets.QMainWindow):
 
         root = QtWidgets.QHBoxLayout(central)
 
-        self.ctrl = self._build_controls()
-        root.addWidget(self.ctrl, 0)
+        ctrl_widget = self._build_controls()
+
+        self.ctrl_scroll = QtWidgets.QScrollArea()
+        self.ctrl_scroll.setWidgetResizable(True)
+        self.ctrl_scroll.setHorizontalScrollBarPolicy(QtCore.Qt.ScrollBarPolicy.ScrollBarAsNeeded)
+        self.ctrl_scroll.setVerticalScrollBarPolicy(QtCore.Qt.ScrollBarPolicy.ScrollBarAsNeeded)
+        self.ctrl_scroll.setWidget(ctrl_widget)
+        self.ctrl_scroll.setMinimumWidth(340)
+        self.ctrl_scroll.setMaximumWidth(460)
+
+        root.addWidget(self.ctrl_scroll, 0)
 
         self.vtk_widget = QtInteractor(central)
         root.addWidget(self.vtk_widget.interactor, 1)
@@ -51,7 +65,11 @@ class MainWindow(QtWidgets.QMainWindow):
         self._actors = {}
         self._build_default_scene()
 
-        self.resize(1450, 850)
+        self.setMinimumSize(1100, 700)
+        self.resize(1280, 800)
+
+    def _on_pipeline_progress(self, msg: str):
+        self.status.setText(msg)
 
     def _build_default_scene(self):
         self.plotter.add_text("Open STL and run pipeline", font_size=12)
@@ -193,13 +211,18 @@ class MainWindow(QtWidgets.QMainWindow):
 
         self.metrics_text = QtWidgets.QPlainTextEdit()
         self.metrics_text.setReadOnly(True)
-        self.metrics_text.setMinimumHeight(220)
         self.metrics_text.setPlainText("No metrics yet")
+        self.metrics_text.setMaximumBlockCount(1000)
+        self.metrics_text.setSizePolicy(
+            QtWidgets.QSizePolicy.Policy.Expanding,
+            QtWidgets.QSizePolicy.Policy.MinimumExpanding,
+        )
 
         metrics_layout.addWidget(self.metrics_text)
         lay.addWidget(metrics_box)
 
         self.status = QtWidgets.QLabel("Ready")
+        self.status.setWordWrap(True)
         lay.addWidget(self.status)
 
         lay.addStretch(1)
@@ -264,10 +287,11 @@ class MainWindow(QtWidgets.QMainWindow):
             return
 
         params = self._collect_params()
-        self._set_busy(True, "Running pipeline")
-        self.metrics_text.setPlainText("Running...")
+        self._set_busy(True, "Подготовка к запуску")
+        self.metrics_text.setPlainText("Выполняется пайплайн...")
 
         self._worker = PipelineWorker(self._stl_path, params)
+        self._worker.progress.connect(self._on_pipeline_progress)
         self._worker.finished_ok.connect(self._on_pipeline_ok)
         self._worker.finished_err.connect(self._on_pipeline_err)
         self._worker.start()
@@ -352,9 +376,9 @@ class MainWindow(QtWidgets.QMainWindow):
             f"band: {res.band:.6g}",
             f"clamped: {res.clamped}",
             "",
-            self._fmt_metrics_block("Shell0", res.shell0_metrics),
+            self._fmt_metrics_block("Shell0", getattr(res, "shell0_metrics", None)),
             "",
-            self._fmt_metrics_block("Shell1", res.shell1_metrics),
+            self._fmt_metrics_block("Shell1", getattr(res, "shell1_metrics", None)),
         ]
         self.metrics_text.setPlainText("\n".join(parts))
 
