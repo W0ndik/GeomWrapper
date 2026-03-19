@@ -1,4 +1,7 @@
+from __future__ import annotations
 from dataclasses import dataclass
+from typing import Union
+
 import pyvista as pv
 
 from app.config import AppParams
@@ -21,7 +24,7 @@ from app.front_repair import repair_front_defects
 @dataclass
 class PipelineResult:
     mesh: pv.PolyData
-    vox_front: pv.DataSet | pv.PolyData
+    vox_front: pv.DataSet
     shell0: pv.PolyData
     shell1: pv.PolyData
     pitch_used: float
